@@ -5,10 +5,13 @@ const _radius = 20.0;
 
 /// Builds a base theme for the given [brightness].
 ThemeData _buildTheme(Brightness brightness) {
-  final seed = const Color(0xFF4A90E2); // soft blue
+  final seed = const Color(0xFF000000); // black
   final scheme = ColorScheme.fromSeed(
     seedColor: seed,
     brightness: brightness,
+  ).copyWith(
+    primary: Colors.black,
+    secondary: Colors.black,
   );
 
   return ThemeData(
@@ -22,6 +25,8 @@ ThemeData _buildTheme(Brightness brightness) {
     elevatedButtonTheme: ElevatedButtonThemeData(
       style: ElevatedButton.styleFrom(
         elevation: 2,
+        backgroundColor: Colors.black,
+        foregroundColor: Colors.white,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(_radius),
         ),
@@ -32,6 +37,18 @@ ThemeData _buildTheme(Brightness brightness) {
               ? scheme.primary.withOpacity(0.1)
               : null,
         ),
+      ),
+    ),
+    floatingActionButtonTheme: const FloatingActionButtonThemeData(
+      backgroundColor: Colors.black,
+      foregroundColor: Colors.white,
+    ),
+    switchTheme: SwitchThemeData(
+      thumbColor: MaterialStateProperty.all(Colors.black),
+      trackColor: MaterialStateProperty.resolveWith(
+        (states) => states.contains(MaterialState.selected)
+            ? Colors.black
+            : null,
       ),
     ),
     inputDecorationTheme: InputDecorationTheme(
