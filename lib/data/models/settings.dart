@@ -13,7 +13,11 @@ class Settings {
   @HiveField(3)
   final String? pin;
 
-  Settings({this.name, this.nfcUid, this.globalRampSeconds = 0, this.pin});
+  /// Creates a new [Settings] instance.
+  ///
+  /// The default for [globalRampSeconds] is 30 which matches the
+  /// "Gentle Wake" default from the design specifications.
+  Settings({this.name, this.nfcUid, this.globalRampSeconds = 30, this.pin});
 
   Settings copyWith({String? name, String? nfcUid, int? globalRampSeconds, String? pin}) {
     return Settings(

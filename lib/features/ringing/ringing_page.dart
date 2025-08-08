@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
+import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../providers/ringing_provider.dart';
-import '../../providers/alarms_provider.dart';
 import '../../providers/settings_provider.dart';
 import '../../core/nfc/nfc_service.dart';
 import '../../core/audio/audio_player_service.dart';
@@ -17,7 +17,8 @@ class RingingPage extends ConsumerStatefulWidget {
 
 class _RingingPageState extends ConsumerState<RingingPage> {
   final _audio = AudioPlayerService();
-  bool scanning = false;
+  int _snoozeRemaining = 0;
+  Timer? _snoozeTimer;
 
   @override
   void initState() {
@@ -28,6 +29,7 @@ class _RingingPageState extends ConsumerState<RingingPage> {
 
   @override
   void dispose() {
+    _snoozeTimer?.cancel();
     _audio.stop();
     super.dispose();
   }
@@ -37,59 +39,131 @@ class _RingingPageState extends ConsumerState<RingingPage> {
     final ringing = ref.watch(ringingProvider);
     final snoozed = ringing.snoozeUsed;
     return Scaffold(
-      backgroundColor: Theme.of(context).colorScheme.background,
+      backgroundColor: const Color(0xFFE5E5E5),
       body: SafeArea(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Text('Alarm', style: Theme.of(context).textTheme.headlineSmall),
-            const SizedBox(height: 16),
-            if (!scanning) ...[
-              Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  ElevatedButton(
-                    onPressed: snoozed
-                        ? null
-                        : () {
-                            ref.read(ringingProvider.notifier).useSnooze();
-                            _audio.stop();
-                            Navigator.of(context).pop();
-                            // In actual implementation: schedule next ring in 5 minutes.
-                          },
-                    child: Text(snoozed ? 'Snoozed' : 'Snooze'),
-                  ),
-                  const SizedBox(width: 16),
-                  ElevatedButton(
-                    onPressed: () async {
-                      setState(() => scanning = true);
-                      final uid = await NfcService().readUid();
-                      setState(() => scanning = false);
-                      final regUid = ref.read(settingsProvider).nfcUid;
-                      if (uid != null && regUid != null && uid == regUid) {
-                        ref.read(ringingProvider.notifier).stopRinging();
-                        _audio.stop();
-                        Navigator.of(context).pushAndRemoveUntil(
-                          MaterialPageRoute(builder: (_) => const AlarmsPage()),
-                          (route) => false,
-                        );
-                      } else {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(content: Text('Wrong tag. Try again')));
-                      }
-                    },
-                    child: const Text('Stop'),
-                  ),
-                ],
+        child: Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const Text(
+                'Alarm',
+                style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold),
               ),
-            ] else
-              const Padding(
-                padding: EdgeInsets.all(16.0),
-                child: CircularProgressIndicator(),
+              const SizedBox(height: 32),
+              Container(
+                width: 220,
+                height: 220,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  border: Border.all(color: const Color(0xFFE0E0E0)),
+                ),
+                alignment: Alignment.center,
+                child: ElevatedButton(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.black,
+                    foregroundColor: Colors.white,
+                    minimumSize: const Size(160, 56),
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12)),
+                  ),
+                  onPressed: () => _startScan(context),
+                  child: const Text('Turn Off'),
+                ),
               ),
-          ],
+              const SizedBox(height: 12),
+              if (snoozed && _snoozeRemaining > 0)
+                Text(
+                  '${_formatSnooze()} Snooze Remaining',
+                  style: const TextStyle(color: Color(0xFF9E9E9E)),
+                )
+              else
+                TextButton(
+                  onPressed: snoozed ? null : _snooze,
+                  child: const Text('Snooze'),
+                ),
+              const SizedBox(height: 8),
+              const Text(
+                'Walk to device to turn off alarm.',
+                style: TextStyle(color: Color(0xFF9E9E9E), fontSize: 14),
+              ),
+            ],
+          ),
         ),
       ),
     );
+  }
+
+  String _formatSnooze() {
+    final m = (_snoozeRemaining ~/ 60).toString().padLeft(1, '0');
+    final s = (_snoozeRemaining % 60).toString().padLeft(2, '0');
+    return '$m:$s';
+  }
+
+  void _snooze() {
+    ref.read(ringingProvider.notifier).useSnooze();
+    setState(() {
+      _snoozeRemaining = 120;
+    });
+    _audio.stop();
+    _snoozeTimer?.cancel();
+    _snoozeTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
+      if (_snoozeRemaining <= 1) {
+        timer.cancel();
+        _audio.play(assetPath: 'assets/sounds/alarm.mp3', rampSeconds: ref.read(settingsProvider).globalRampSeconds);
+        setState(() {
+          _snoozeRemaining = 0;
+        });
+      } else {
+        setState(() {
+          _snoozeRemaining--;
+        });
+      }
+    });
+  }
+
+  Future<void> _startScan(BuildContext context) async {
+    final uid = await showDialog<String>(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogContext) {
+        NfcService().readUid().then((value) {
+          if (Navigator.of(dialogContext).canPop()) {
+            Navigator.of(dialogContext).pop(value);
+          }
+        });
+        return AlertDialog(
+          title: const Text('Ready to Scan'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: const [
+              Text('Hold the top of your phone near your wakelock device.'),
+              SizedBox(height: 16),
+              Icon(Icons.nfc, size: 48, color: Color(0xFF007AFF)),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(),
+              child: const Text('Cancel'),
+            ),
+          ],
+        );
+      },
+    );
+
+    final regUid = ref.read(settingsProvider).nfcUid;
+    if (uid != null && regUid != null && uid == regUid) {
+      ref.read(ringingProvider.notifier).stopRinging();
+      _audio.stop();
+      if (context.mounted) {
+        Navigator.of(context).pushAndRemoveUntil(
+          MaterialPageRoute(builder: (_) => const AlarmsPage()),
+          (route) => false,
+        );
+      }
+    } else if (uid != null && context.mounted) {
+      ScaffoldMessenger.of(context)
+          .showSnackBar(const SnackBar(content: Text('Wrong tag. Try again')));
+    }
   }
 }
