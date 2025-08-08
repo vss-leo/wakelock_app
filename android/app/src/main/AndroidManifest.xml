@@ -1,0 +1,19 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    package="com.example.wakelock">
+    <uses-permission android:name="android.permission.NFC" />
+    <uses-permission android:name="android.permission.USE_EXACT_ALARM" />
+    <application
+        android:allowBackup="true"
+        android:label="WakeLock"
+        android:icon="@mipmap/ic_launcher">
+        <activity
+            android:name="com.example.wakelock.MainActivity"
+            android:launchMode="singleTask"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+    </application>
+</manifest>
